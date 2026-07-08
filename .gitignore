@@ -1,0 +1,11 @@
+huzzi/
+__pycache__/
+*.pyc
+*.pyo
+.env
+config.yml
+*.egg-info/
+dist/
+build/
+test_config.py
+__init__.py
