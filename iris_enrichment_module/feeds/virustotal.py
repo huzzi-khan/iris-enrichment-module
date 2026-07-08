@@ -52,6 +52,7 @@ def lookup_ip(ip):
     stats = attrs.get("last_analysis_stats", {})
     return {
         "source": "VirusTotal",
+        "score": round((stats.get("malicious", 0) / max(sum(stats.values()), 1)) * 100),
         "malicious": stats.get("malicious", 0),
         "suspicious": stats.get("suspicious", 0),
         "harmless": stats.get("harmless", 0),
@@ -71,6 +72,7 @@ def lookup_domain(domain):
     stats = attrs.get("last_analysis_stats", {})
     return {
         "source": "VirusTotal",
+        "score": round((stats.get("malicious", 0) / max(sum(stats.values()), 1)) * 100),
         "malicious": stats.get("malicious", 0),
         "suspicious": stats.get("suspicious", 0),
         "harmless": stats.get("harmless", 0),
@@ -90,6 +92,7 @@ def lookup_hash(file_hash):
     stats = attrs.get("last_analysis_stats", {})
     return {
         "source": "VirusTotal",
+        "score": round((stats.get("malicious", 0) / max(sum(stats.values()), 1)) * 100),
         "malicious": stats.get("malicious", 0),
         "suspicious": stats.get("suspicious", 0),
         "harmless": stats.get("harmless", 0),
@@ -112,6 +115,7 @@ def lookup_url(url):
     stats = attrs.get("last_analysis_stats", {})
     return {
         "source": "VirusTotal",
+        "score": round((stats.get("malicious", 0) / max(sum(stats.values()), 1)) * 100),
         "malicious": stats.get("malicious", 0),
         "suspicious": stats.get("suspicious", 0),
         "harmless": stats.get("harmless", 0),
