@@ -4,13 +4,8 @@ from iris_interface.IrisModuleInterface import IrisModuleInterface, IrisModuleTy
 import iris_enrichment_module.IrisEnrichmentConfig as interface_conf
 
 
-class IrisEnrichmentModInterface(IrisModuleInterface):
-    """
-    Main IRIS module class for automated IOC enrichment.
-    IRIS loads this class and calls it when IOC events fire.
-    """
+class IrisEnrichmentInterface(IrisModuleInterface):
 
-    # ── Module declaration ────────────────────────────────
     _module_name = interface_conf.module_name
     _module_description = interface_conf.module_description
     _interface_version = interface_conf.interface_version
@@ -21,62 +16,41 @@ class IrisEnrichmentModInterface(IrisModuleInterface):
     _module_type = IrisModuleTypes.module_processor
 
     def register_hooks(self, module_id: int):
-        """
-        Called by IRIS when loading the module.
-        Registers which hooks this module wants to receive
-        based on admin configuration.
-        """
         module_conf = self.module_dict_conf
 
-        # Hook 1 — auto trigger on IOC create
         if module_conf.get("auto_trigger_on_create"):
             status = self.register_to_hook(
                 module_id,
                 iris_hook_name="on_postload_ioc_create"
             )
             if status.is_failure():
-                self.log.error(
-                    f"Failed to register on_postload_ioc_create: "
-                    f"{status.get_message()}"
-                )
+                self.log.error(f"Failed to register on_postload_ioc_create: {status.get_message()}")
             else:
                 self.log.info("Registered hook: on_postload_ioc_create")
 
-        # Hook 2 — auto trigger on IOC update
         if module_conf.get("auto_trigger_on_update"):
             status = self.register_to_hook(
                 module_id,
                 iris_hook_name="on_postload_ioc_update"
             )
             if status.is_failure():
-                self.log.error(
-                    f"Failed to register on_postload_ioc_update: "
-                    f"{status.get_message()}"
-                )
+                self.log.error(f"Failed to register on_postload_ioc_update: {status.get_message()}")
             else:
                 self.log.info("Registered hook: on_postload_ioc_update")
 
-        # Hook 3 — manual trigger
         if module_conf.get("manual_trigger_enabled"):
             status = self.register_to_hook(
                 module_id,
                 iris_hook_name="on_manual_trigger_ioc"
             )
             if status.is_failure():
-                self.log.error(
-                    f"Failed to register on_manual_trigger_ioc: "
-                    f"{status.get_message()}"
-                )
+                self.log.error(f"Failed to register on_manual_trigger_ioc: {status.get_message()}")
             else:
                 self.log.info("Registered hook: on_manual_trigger_ioc")
 
         return InterfaceStatus.I2Success()
 
     def hooks_handler(self, hook_name: str, hook_ui_name: str, data: any):
-        """
-        Called by IRIS every time a registered event fires.
-        Routes the event to the correct handler.
-        """
         self.log.info(f"Hook received: {hook_name}")
 
         if hook_name in [
@@ -93,60 +67,58 @@ class IrisEnrichmentModInterface(IrisModuleInterface):
         )
 
     def _handle_ioc(self, data):
-        """
-        Main enrichment handler.
-        Receives IOC data from IRIS, runs enrichment,
-        writes verdict back to the IOC custom attributes.
-        """
         try:
-            # ── Step 1: Extract IOC from data ─────────────
-            ioc = data.get("ioc")
+            # ── Step 1: Extract IOC ───────────────────────
+            if isinstance(data, list):
+                if not data:
+                    self.log.error("Empty data list received")
+                    return InterfaceStatus.I2Error(
+                        data=data, logs=list(self.message_queue)
+                    )
+                ioc = data[0]
+            elif isinstance(data, dict):
+                ioc = data.get("ioc")
+            else:
+                ioc = data
+
             if not ioc:
                 self.log.error("No IOC found in hook data")
                 return InterfaceStatus.I2Error(
-                    data=data,
-                    logs=list(self.message_queue)
+                    data=data, logs=list(self.message_queue)
                 )
 
-            ioc_value = ioc.ioc_value
-            ioc_type = ioc.ioc_type.type_name if ioc.ioc_type else "unknown"
-            ioc_id = ioc.ioc_id
+            try:
+                ioc_value = ioc.ioc_value
+                ioc_type = ioc.ioc_type.type_name if ioc.ioc_type else "unknown"
+                ioc_id = ioc.ioc_id
+            except AttributeError as e:
+                self.log.error(f"Could not extract IOC fields: {e}")
+                return InterfaceStatus.I2Error(
+                    data=data, logs=list(self.message_queue)
+                )
 
-            self.log.info(
-                f"Enriching IOC #{ioc_id}: "
-                f"{ioc_value} (type: {ioc_type})"
-            )
+            self.log.info(f"Enriching IOC #{ioc_id}: {ioc_value} (type: {ioc_type})")
 
-            # ── Step 2: Get config values ─────────────────
+            # ── Step 2: Get config ────────────────────────
             mod_conf = self.module_dict_conf
-            mal_threshold = float(
-                mod_conf.get("malicious_threshold", 80)
-            )
-            sus_threshold = float(
-                mod_conf.get("suspicious_threshold", 60)
-            )
-            cache_enabled = mod_conf.get("cache_enabled", True)
+            cache_enabled = bool(mod_conf.get("cache_enabled", True))
             cache_ttl = float(mod_conf.get("cache_ttl_hours", 24)) * 3600
 
             # ── Step 3: Check cache ───────────────────────
-            from iris_enrichment_module.cache import cache
+            from iris_enrichment_module.cache import EnrichmentCache
+            _cache = EnrichmentCache(ttl_seconds=cache_ttl, enabled=cache_enabled)
+
             if cache_enabled:
-                cached = cache.get(ioc_value)
+                cached = _cache.get(ioc_value)
                 if cached:
-                    self.log.info(
-                        f"Cache hit for {ioc_value} — "
-                        f"skipping feed queries"
-                    )
-                    self._write_to_ioc(ioc, cached, data)
+                    self.log.info(f"Cache hit for {ioc_value}")
+                    self._write_to_ioc(ioc, cached)
                     return InterfaceStatus.I2Success(
-                        data=data,
-                        logs=list(self.message_queue)
+                        data=data, logs=list(self.message_queue)
                     )
 
-            # ── Step 4: Run enrichment ────────────────────
-            feed_results = self._run_feeds(
-                ioc_value, ioc_type, mod_conf
-            )
+            # ── Step 4: Run feeds ─────────────────────────
+            feed_results = self._run_feeds(ioc_value, ioc_type, mod_conf)
 
             # ── Step 5: Compute verdict ───────────────────
             from iris_enrichment_module.verdict import make_verdict
@@ -157,16 +129,15 @@ class IrisEnrichmentModInterface(IrisModuleInterface):
                 f"{verdict['verdict']} (score: {verdict['score']})"
             )
 
-            # ── Step 6: Store in cache ────────────────────
+            # ── Step 6: Cache result ──────────────────────
             if cache_enabled:
-                cache.set(ioc_value, verdict)
+                _cache.set(ioc_value, verdict)
 
-            # ── Step 7: Write to IRIS IOC ─────────────────
-            self._write_to_ioc(ioc, verdict, data)
+            # ── Step 7: Write to IRIS ─────────────────────
+            self._write_to_ioc(ioc, verdict)
 
             return InterfaceStatus.I2Success(
-                data=data,
-                logs=list(self.message_queue)
+                data=data, logs=list(self.message_queue)
             )
 
         except Exception as e:
@@ -175,23 +146,20 @@ class IrisEnrichmentModInterface(IrisModuleInterface):
                 f"{traceback.format_exc()}"
             )
             return InterfaceStatus.I2Error(
-                data=data,
-                logs=list(self.message_queue)
+                data=data, logs=list(self.message_queue)
             )
 
     def _run_feeds(self, ioc_value, ioc_type, mod_conf):
-        """
-        Routes the IOC to the correct feed clients
-        based on IOC type and enabled feeds in config.
-        Returns list of raw feed result dicts.
-        """
         results = []
 
-        # Define IOC type groups
-        ip_types = [
-            "ip-any", "ip-dst", "ip-src",
-            "ip-dst|port", "ip-src|port"
-        ]
+        abuseipdb_key = mod_conf.get("abuseipdb_api_key")
+        vt_key = mod_conf.get("virustotal_api_key")
+        urlhaus_key = mod_conf.get("urlhaus_api_key")
+        mb_key = mod_conf.get("malwarebazaar_api_key")
+        emailrep_key = mod_conf.get("emailrep_api_key")
+        nvd_key = mod_conf.get("nvd_api_key")
+
+        ip_types = ["ip-any", "ip-dst", "ip-src", "ip-dst|port", "ip-src|port"]
         domain_types = ["domain", "hostname", "domain|ip"]
         hash_types = ["md5", "sha1", "sha256", "sha512"]
         url_types = ["url"]
@@ -199,78 +167,69 @@ class IrisEnrichmentModInterface(IrisModuleInterface):
         cve_types = ["vulnerability", "cve"]
         asn_types = ["asn"]
 
-        # ── IP enrichment ─────────────────────────────────
         if ioc_type in ip_types:
-            if mod_conf.get("abuseipdb_enabled"):
+            if mod_conf.get("abuseipdb_enabled") and abuseipdb_key:
                 from iris_enrichment_module.feeds.abuseipdb import lookup_ip
                 self.log.info(f"Querying AbuseIPDB for {ioc_value}")
-                results.append(lookup_ip(ioc_value))
+                results.append(lookup_ip(ioc_value, abuseipdb_key))
 
-            if mod_conf.get("virustotal_enabled"):
+            if mod_conf.get("virustotal_enabled") and vt_key:
                 from iris_enrichment_module.feeds.virustotal import lookup_ip as vt_ip
                 self.log.info(f"Querying VirusTotal for {ioc_value}")
-                results.append(vt_ip(ioc_value))
+                results.append(vt_ip(ioc_value, vt_key))
 
-        # ── Domain enrichment ─────────────────────────────
         elif ioc_type in domain_types:
-            if mod_conf.get("virustotal_enabled"):
+            if mod_conf.get("virustotal_enabled") and vt_key:
                 from iris_enrichment_module.feeds.virustotal import lookup_domain
                 self.log.info(f"Querying VirusTotal domain for {ioc_value}")
-                results.append(lookup_domain(ioc_value))
+                results.append(lookup_domain(ioc_value, vt_key))
 
             if mod_conf.get("urlhaus_enabled"):
                 from iris_enrichment_module.feeds.urlhaus import lookup_host
                 self.log.info(f"Querying URLhaus host for {ioc_value}")
-                results.append(lookup_host(ioc_value))
+                results.append(lookup_host(ioc_value, urlhaus_key))
 
-        # ── Hash enrichment ───────────────────────────────
         elif ioc_type in hash_types:
-            if mod_conf.get("virustotal_enabled"):
+            if mod_conf.get("virustotal_enabled") and vt_key:
                 from iris_enrichment_module.feeds.virustotal import lookup_hash
                 self.log.info(f"Querying VirusTotal hash for {ioc_value}")
-                results.append(lookup_hash(ioc_value))
+                results.append(lookup_hash(ioc_value, vt_key))
 
-            if mod_conf.get("malwarebazaar_enabled"):
+            if mod_conf.get("malwarebazaar_enabled") and mb_key:
                 from iris_enrichment_module.feeds.malwarebazaar import lookup_hash as mb
                 self.log.info(f"Querying MalwareBazaar for {ioc_value}")
-                results.append(mb(ioc_value))
+                results.append(mb(ioc_value, mb_key))
 
-        # ── URL enrichment ────────────────────────────────
         elif ioc_type in url_types:
-            if mod_conf.get("virustotal_enabled"):
+            if mod_conf.get("virustotal_enabled") and vt_key:
                 from iris_enrichment_module.feeds.virustotal import lookup_url as vt_url
                 self.log.info(f"Querying VirusTotal URL for {ioc_value}")
-                results.append(vt_url(ioc_value))
+                results.append(vt_url(ioc_value, vt_key))
 
             if mod_conf.get("urlhaus_enabled"):
                 from iris_enrichment_module.feeds.urlhaus import lookup_url
                 self.log.info(f"Querying URLhaus URL for {ioc_value}")
-                results.append(lookup_url(ioc_value))
+                results.append(lookup_url(ioc_value, urlhaus_key))
 
-        # ── Email enrichment ──────────────────────────────
         elif ioc_type in email_types:
-            if mod_conf.get("emailrep_enabled"):
+            if mod_conf.get("emailrep_enabled") and emailrep_key:
                 from iris_enrichment_module.feeds.emailrep import lookup_email
                 self.log.info(f"Querying EmailRep for {ioc_value}")
-                results.append(lookup_email(ioc_value))
+                results.append(lookup_email(ioc_value, emailrep_key))
 
-        # ── CVE enrichment ────────────────────────────────
         elif ioc_type in cve_types:
             if mod_conf.get("nvd_enabled"):
                 from iris_enrichment_module.feeds.nvd import lookup_cve
                 self.log.info(f"Querying NVD for {ioc_value}")
-                results.append(lookup_cve(ioc_value))
+                results.append(lookup_cve(ioc_value, nvd_key))
 
-        # ── ASN enrichment ────────────────────────────────
         elif ioc_type in asn_types:
             from iris_enrichment_module.feeds.ripe import lookup_asn
             self.log.info(f"Querying RIPE for {ioc_value}")
             results.append(lookup_asn(ioc_value))
 
         else:
-            self.log.warning(
-                f"No feed configured for IOC type: {ioc_type}"
-            )
+            self.log.warning(f"No feed configured for IOC type: {ioc_type}")
             results.append({
                 "error": "unsupported_type",
                 "source": "enrichment_module"
@@ -278,41 +237,41 @@ class IrisEnrichmentModInterface(IrisModuleInterface):
 
         return results
 
-    def _write_to_ioc(self, ioc, verdict, data):
+    def _write_to_ioc(self, ioc, verdict):
         """
-        Writes the enrichment verdict to the IOC's
-        custom attributes in IRIS.
-        Uses IRIS internal database session — no HTTP calls.
+        Writes enrichment verdict to IRIS IOC using the same
+        pattern as IrisVT — add_tab_attribute_field for the
+        HTML report and direct ioc_tags modification for tags.
         """
         try:
-            # Build the HTML report for the custom attribute
+            from app.datamgmt.manage.manage_attribute_db import (
+                add_tab_attribute_field
+            )
+
             html_report = self._build_html_report(verdict)
 
-            # Add as a custom attribute to the IOC
-            # This follows the same pattern as IrisVT
-            status = self.add_ioc_attribute(
-                ioc_id=ioc.ioc_id,
-                attribute_name="Enrichment",
-                attribute_value=html_report,
-                attribute_display_name="Threat Intelligence Enrichment"
+            # Write HTML report as a custom attribute tab
+            # exactly the same way IrisVT does it
+            add_tab_attribute_field(
+                ioc,
+                tab_name="Enrichment",
+                field_name="Threat Intelligence",
+                field_type="html",
+                field_value=html_report
             )
 
-            if status and status.is_failure():
-                self.log.error(
-                    f"Failed to write attribute to IOC "
-                    f"#{ioc.ioc_id}: {status.get_message()}"
-                )
-            else:
-                self.log.info(
-                    f"Enrichment written to IOC #{ioc.ioc_id}"
-                )
+            self.log.info(f"Enrichment attribute written to IOC #{ioc.ioc_id}")
 
-            # Also add verdict as a tag on the IOC
-            verdict_label = verdict.get("verdict", "UNKNOWN")
-            self.add_ioc_tag(
-                ioc_id=ioc.ioc_id,
-                tag=f"enrichment:{verdict_label.lower()}"
-            )
+            # Write verdict as a tag directly on the IOC object
+            verdict_label = verdict.get("verdict", "UNKNOWN").lower()
+            tag = f"enrichment:{verdict_label}"
+
+            if ioc.ioc_tags is None:
+                ioc.ioc_tags = ""
+
+            if tag not in ioc.ioc_tags.split(","):
+                ioc.ioc_tags = f"{ioc.ioc_tags},{tag}".strip(",")
+                self.log.info(f"Tag '{tag}' added to IOC #{ioc.ioc_id}")
 
         except Exception as e:
             self.log.error(
@@ -321,11 +280,6 @@ class IrisEnrichmentModInterface(IrisModuleInterface):
             )
 
     def _build_html_report(self, verdict):
-        """
-        Builds an HTML string for display in the
-        IRIS custom attribute tab on the IOC.
-        Analysts see this as a formatted card.
-        """
         verdict_label = verdict.get("verdict", "UNKNOWN")
         score = verdict.get("score", 0)
         sources = verdict.get("feed_sources", "unknown")
@@ -338,7 +292,6 @@ class IrisEnrichmentModInterface(IrisModuleInterface):
         enrichment_date = verdict.get("enrichment_date", "unknown")
         raw_detail = verdict.get("raw_detail", "").replace("\n", "<br>")
 
-        # Colour the verdict badge
         if verdict_label == "MALICIOUS":
             badge_colour = "#dc3545"
         elif verdict_label == "SUSPICIOUS":
@@ -360,43 +313,34 @@ class IrisEnrichmentModInterface(IrisModuleInterface):
                     {verdict_label}
                 </span>
             </dd>
-
             <dt class="col-sm-3">Confidence Score</dt>
             <dd class="col-sm-9">{score} / 100</dd>
-
             <dt class="col-sm-3">Malicious Sources</dt>
             <dd class="col-sm-9">{malicious_count}</dd>
-
             <dt class="col-sm-3">Feed Sources</dt>
             <dd class="col-sm-9">{sources}</dd>
-
             <dt class="col-sm-3">Country</dt>
             <dd class="col-sm-9">{country}</dd>
-
             <dt class="col-sm-3">ISP / AS Owner</dt>
             <dd class="col-sm-9">{isp}</dd>
-
             <dt class="col-sm-3">Tor Exit Node</dt>
             <dd class="col-sm-9">{is_tor}</dd>
-
             <dt class="col-sm-3">Malware Family</dt>
             <dd class="col-sm-9">{malware_family}</dd>
-
             <dt class="col-sm-3">Tags</dt>
             <dd class="col-sm-9">{tags}</dd>
-
             <dt class="col-sm-3">Enriched At</dt>
             <dd class="col-sm-9">{enrichment_date}</dd>
         </dl>
     </div>
 </div>
-
 <div class="row">
     <div class="col-12">
         <div class="accordion">
             <h3>Raw Detail</h3>
             <div class="card">
-                <div class="card-header collapsed" id="drop_raw_enrich"
+                <div class="card-header collapsed"
+                     id="drop_raw_enrich"
                      data-toggle="collapse"
                      data-target="#drop_raw_enrich_body"
                      aria-expanded="false" role="button">

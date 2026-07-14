@@ -1,25 +1,16 @@
 import requests
 import base64
-from iris_enrichment_module.config_loader import config
 
 BASE_URL = "https://www.virustotal.com/api/v3"
 
-def _headers():
-    return {"x-apikey": config.feed_api_key("virustotal")}
-
-def _check_enabled():
-    if not config.feed_enabled("virustotal"):
-        return {"error": "feed_disabled", "source": "VirusTotal"}
-    if not config.feed_api_key("virustotal"):
-        return {"error": "no_api_key", "source": "VirusTotal"}
-    return None
-
-def _get(url):
-    """Shared GET with retry logic."""
-    timeout = config.feed_timeout("virustotal")
-    for attempt in range(1, config.retry_max_attempts + 1):
+def _get(url, api_key, timeout=15):
+    for attempt in range(1, 3):
         try:
-            response = requests.get(url, headers=_headers(), timeout=timeout)
+            response = requests.get(
+                url,
+                headers={"x-apikey": api_key},
+                timeout=timeout
+            )
             if response.status_code == 200:
                 return response.json()
             elif response.status_code == 401:
@@ -29,30 +20,32 @@ def _get(url):
             elif response.status_code == 429:
                 return {"error": "rate_limit_exceeded", "source": "VirusTotal"}
             else:
-                if attempt < config.retry_max_attempts:
+                if attempt < 2:
                     import time
-                    time.sleep(config.retry_delay)
+                    time.sleep(10)
                     continue
                 return {"error": f"http_{response.status_code}", "source": "VirusTotal"}
         except requests.Timeout:
-            if attempt < config.retry_max_attempts:
+            if attempt < 2:
                 import time
-                time.sleep(config.retry_delay)
+                time.sleep(10)
                 continue
             return {"error": "timeout", "source": "VirusTotal"}
         except Exception as e:
             return {"error": str(e), "source": "VirusTotal"}
 
-def lookup_ip(ip):
-    err = _check_enabled()
-    if err: return err
-    raw = _get(f"{BASE_URL}/ip_addresses/{ip}")
-    if "error" in raw: return raw
+def lookup_ip(ip, api_key, timeout=15):
+    if not api_key:
+        return {"error": "no_api_key", "source": "VirusTotal"}
+    raw = _get(f"{BASE_URL}/ip_addresses/{ip}", api_key, timeout)
+    if "error" in raw:
+        return raw
     attrs = raw.get("data", {}).get("attributes", {})
     stats = attrs.get("last_analysis_stats", {})
+    total = sum(stats.values()) or 1
     return {
         "source": "VirusTotal",
-        "score": round((stats.get("malicious", 0) / max(sum(stats.values()), 1)) * 100),
+        "score": round((stats.get("malicious", 0) / total) * 100),
         "malicious": stats.get("malicious", 0),
         "suspicious": stats.get("suspicious", 0),
         "harmless": stats.get("harmless", 0),
@@ -63,16 +56,18 @@ def lookup_ip(ip):
         "tags": attrs.get("tags", []),
     }
 
-def lookup_domain(domain):
-    err = _check_enabled()
-    if err: return err
-    raw = _get(f"{BASE_URL}/domains/{domain}")
-    if "error" in raw: return raw
+def lookup_domain(domain, api_key, timeout=15):
+    if not api_key:
+        return {"error": "no_api_key", "source": "VirusTotal"}
+    raw = _get(f"{BASE_URL}/domains/{domain}", api_key, timeout)
+    if "error" in raw:
+        return raw
     attrs = raw.get("data", {}).get("attributes", {})
     stats = attrs.get("last_analysis_stats", {})
+    total = sum(stats.values()) or 1
     return {
         "source": "VirusTotal",
-        "score": round((stats.get("malicious", 0) / max(sum(stats.values()), 1)) * 100),
+        "score": round((stats.get("malicious", 0) / total) * 100),
         "malicious": stats.get("malicious", 0),
         "suspicious": stats.get("suspicious", 0),
         "harmless": stats.get("harmless", 0),
@@ -83,16 +78,18 @@ def lookup_domain(domain):
         "tags": attrs.get("tags", []),
     }
 
-def lookup_hash(file_hash):
-    err = _check_enabled()
-    if err: return err
-    raw = _get(f"{BASE_URL}/files/{file_hash}")
-    if "error" in raw: return raw
+def lookup_hash(file_hash, api_key, timeout=15):
+    if not api_key:
+        return {"error": "no_api_key", "source": "VirusTotal"}
+    raw = _get(f"{BASE_URL}/files/{file_hash}", api_key, timeout)
+    if "error" in raw:
+        return raw
     attrs = raw.get("data", {}).get("attributes", {})
     stats = attrs.get("last_analysis_stats", {})
+    total = sum(stats.values()) or 1
     return {
         "source": "VirusTotal",
-        "score": round((stats.get("malicious", 0) / max(sum(stats.values()), 1)) * 100),
+        "score": round((stats.get("malicious", 0) / total) * 100),
         "malicious": stats.get("malicious", 0),
         "suspicious": stats.get("suspicious", 0),
         "harmless": stats.get("harmless", 0),
@@ -101,21 +98,26 @@ def lookup_hash(file_hash):
         "size": attrs.get("size", 0),
         "names": attrs.get("names", []),
         "tags": attrs.get("tags", []),
-        "popular_threat_name": attrs.get("popular_threat_classification", {}).get("suggested_threat_label", "unknown"),
+        "popular_threat_name": attrs.get(
+            "popular_threat_classification", {}
+        ).get("suggested_threat_label", "unknown"),
     }
 
-def lookup_url(url):
-    err = _check_enabled()
-    if err: return err
-    # VT requires URL to be base64 encoded
-    url_id = base64.urlsafe_b64encode(url.encode()).decode().strip("=")
-    raw = _get(f"{BASE_URL}/urls/{url_id}")
-    if "error" in raw: return raw
+def lookup_url(url, api_key, timeout=15):
+    if not api_key:
+        return {"error": "no_api_key", "source": "VirusTotal"}
+    url_id = base64.urlsafe_b64encode(
+        url.encode()
+    ).decode().strip("=")
+    raw = _get(f"{BASE_URL}/urls/{url_id}", api_key, timeout)
+    if "error" in raw:
+        return raw
     attrs = raw.get("data", {}).get("attributes", {})
     stats = attrs.get("last_analysis_stats", {})
+    total = sum(stats.values()) or 1
     return {
         "source": "VirusTotal",
-        "score": round((stats.get("malicious", 0) / max(sum(stats.values()), 1)) * 100),
+        "score": round((stats.get("malicious", 0) / total) * 100),
         "malicious": stats.get("malicious", 0),
         "suspicious": stats.get("suspicious", 0),
         "harmless": stats.get("harmless", 0),

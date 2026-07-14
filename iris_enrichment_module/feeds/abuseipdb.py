@@ -1,24 +1,16 @@
 import requests
-from iris_enrichment_module.config_loader import config
 
 BASE_URL = "https://api.abuseipdb.com/api/v2"
 
-def lookup_ip(ip_address):
+def lookup_ip(ip_address, api_key, max_age_days=90, timeout=10):
     """
     Query AbuseIPDB for an IP address.
-    Always returns a dict — never raises an exception.
+    API key passed as parameter — not read from config file.
     """
-    if not config.feed_enabled("abuseipdb"):
-        return {"error": "feed_disabled", "source": "AbuseIPDB"}
-
-    api_key = config.feed_api_key("abuseipdb")
     if not api_key:
         return {"error": "no_api_key", "source": "AbuseIPDB"}
 
-    timeout = config.feed_timeout("abuseipdb")
-    max_age = config.feed("abuseipdb").get("max_age_days", 90)
-
-    for attempt in range(1, config.retry_max_attempts + 1):
+    for attempt in range(1, 3):
         try:
             response = requests.get(
                 f"{BASE_URL}/check",
@@ -28,12 +20,11 @@ def lookup_ip(ip_address):
                 },
                 params={
                     "ipAddress": ip_address,
-                    "maxAgeInDays": max_age,
+                    "maxAgeInDays": max_age_days,
                     "verbose": True
                 },
                 timeout=timeout
             )
-
             if response.status_code == 200:
                 data = response.json().get("data", {})
                 return {
@@ -54,16 +45,15 @@ def lookup_ip(ip_address):
             elif response.status_code == 429:
                 return {"error": "rate_limit_exceeded", "source": "AbuseIPDB"}
             else:
-                if attempt < config.retry_max_attempts:
+                if attempt < 2:
                     import time
-                    time.sleep(config.retry_delay)
+                    time.sleep(10)
                     continue
                 return {"error": f"http_{response.status_code}", "source": "AbuseIPDB"}
-
         except requests.Timeout:
-            if attempt < config.retry_max_attempts:
+            if attempt < 2:
                 import time
-                time.sleep(config.retry_delay)
+                time.sleep(10)
                 continue
             return {"error": "timeout", "source": "AbuseIPDB"}
         except Exception as e:
