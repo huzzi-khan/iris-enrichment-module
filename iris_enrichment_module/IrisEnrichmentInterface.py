@@ -280,6 +280,20 @@ class IrisEnrichmentInterface(IrisModuleInterface):
             )
 
     def _build_html_report(self, verdict):
+        """
+        Builds the HTML report for the "Enrichment" custom attribute tab.
+
+        NOTE: IRIS runs this value through a Jinja filter
+        (sanitize_attribute_html -> bleach.clean) before rendering it in
+        the IOC modal. That filter only allows a specific tag list
+        (a, abbr, b, blockquote, br, code, div, em, h1-h6, hr, i, img, li,
+        ol, p, pre, span, strong, table, tbody, td, th, thead, tr, ul) and
+        only 'class'/'title' attributes globally (plus href/src on a/img).
+        It strips 'style', 'id', and 'data-*' attributes entirely, and
+        unwraps any tag not on the allowlist (e.g. dl/dt/dd) down to bare
+        text. This report is written using only allowed tags/attributes
+        so it survives sanitization intact.
+        """
         verdict_label = verdict.get("verdict", "UNKNOWN")
         score = verdict.get("score", 0)
         sources = verdict.get("feed_sources", "unknown")
@@ -293,68 +307,68 @@ class IrisEnrichmentInterface(IrisModuleInterface):
         raw_detail = verdict.get("raw_detail", "").replace("\n", "<br>")
 
         if verdict_label == "MALICIOUS":
-            badge_colour = "#dc3545"
+            badge_class = "badge-danger"
         elif verdict_label == "SUSPICIOUS":
-            badge_colour = "#fd7e14"
+            badge_class = "badge-warning"
         elif verdict_label == "CLEAN":
-            badge_colour = "#28a745"
+            badge_class = "badge-success"
         else:
-            badge_colour = "#6c757d"
+            badge_class = "badge-secondary"
 
         html = f"""
 <div class="row">
     <div class="col-12">
         <h3>Enrichment Summary</h3>
-        <dl class="row">
-            <dt class="col-sm-3">Verdict</dt>
-            <dd class="col-sm-9">
-                <span style="background:{badge_colour};color:white;
-                padding:3px 10px;border-radius:4px;font-weight:bold;">
-                    {verdict_label}
-                </span>
-            </dd>
-            <dt class="col-sm-3">Confidence Score</dt>
-            <dd class="col-sm-9">{score} / 100</dd>
-            <dt class="col-sm-3">Malicious Sources</dt>
-            <dd class="col-sm-9">{malicious_count}</dd>
-            <dt class="col-sm-3">Feed Sources</dt>
-            <dd class="col-sm-9">{sources}</dd>
-            <dt class="col-sm-3">Country</dt>
-            <dd class="col-sm-9">{country}</dd>
-            <dt class="col-sm-3">ISP / AS Owner</dt>
-            <dd class="col-sm-9">{isp}</dd>
-            <dt class="col-sm-3">Tor Exit Node</dt>
-            <dd class="col-sm-9">{is_tor}</dd>
-            <dt class="col-sm-3">Malware Family</dt>
-            <dd class="col-sm-9">{malware_family}</dd>
-            <dt class="col-sm-3">Tags</dt>
-            <dd class="col-sm-9">{tags}</dd>
-            <dt class="col-sm-3">Enriched At</dt>
-            <dd class="col-sm-9">{enrichment_date}</dd>
-        </dl>
+        <table class="table">
+            <tbody>
+                <tr>
+                    <th>Verdict</th>
+                    <td><span class="badge {badge_class}">{verdict_label}</span></td>
+                </tr>
+                <tr>
+                    <th>Confidence Score</th>
+                    <td>{score} / 100</td>
+                </tr>
+                <tr>
+                    <th>Malicious Sources</th>
+                    <td>{malicious_count}</td>
+                </tr>
+                <tr>
+                    <th>Feed Sources</th>
+                    <td>{sources}</td>
+                </tr>
+                <tr>
+                    <th>Country</th>
+                    <td>{country}</td>
+                </tr>
+                <tr>
+                    <th>ISP / AS Owner</th>
+                    <td>{isp}</td>
+                </tr>
+                <tr>
+                    <th>Tor Exit Node</th>
+                    <td>{is_tor}</td>
+                </tr>
+                <tr>
+                    <th>Malware Family</th>
+                    <td>{malware_family}</td>
+                </tr>
+                <tr>
+                    <th>Tags</th>
+                    <td>{tags}</td>
+                </tr>
+                <tr>
+                    <th>Enriched At</th>
+                    <td>{enrichment_date}</td>
+                </tr>
+            </tbody>
+        </table>
     </div>
 </div>
 <div class="row">
     <div class="col-12">
-        <div class="accordion">
-            <h3>Raw Detail</h3>
-            <div class="card">
-                <div class="card-header collapsed"
-                     id="drop_raw_enrich"
-                     data-toggle="collapse"
-                     data-target="#drop_raw_enrich_body"
-                     aria-expanded="false" role="button">
-                    <div class="span-title">Full enrichment detail</div>
-                    <div class="span-mode"></div>
-                </div>
-                <div id="drop_raw_enrich_body" class="collapse"
-                     aria-labelledby="drop_raw_enrich">
-                    <div class="card-body">
-                        <pre>{raw_detail}</pre>
-                    </div>
-                </div>
-            </div>
-        </div>
+        <h3>Raw Detail</h3>
+        <pre>{raw_detail}</pre>
     </div>
 </div>
 """
