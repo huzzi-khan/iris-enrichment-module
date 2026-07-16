@@ -122,7 +122,12 @@ class IrisEnrichmentInterface(IrisModuleInterface):
 
             # ── Step 5: Compute verdict ───────────────────
             from iris_enrichment_module.verdict import make_verdict
-            verdict = make_verdict(feed_results, ioc_type, ioc_value)
+            malicious_threshold = mod_conf.get("malicious_threshold", 80)
+            suspicious_threshold = mod_conf.get("suspicious_threshold", 60)
+            verdict = make_verdict(
+                feed_results, ioc_type, ioc_value,
+                malicious_threshold, suspicious_threshold
+            )
 
             self.log.info(
                 f"Verdict for {ioc_value}: "

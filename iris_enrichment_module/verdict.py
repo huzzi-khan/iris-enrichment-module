@@ -1,10 +1,15 @@
 import datetime
 
 
-def make_verdict(feed_results, ioc_type, ioc_value):
+def make_verdict(feed_results, ioc_type, ioc_value, malicious_threshold=80, suspicious_threshold=60):
     """
     Takes a list of raw feed result dicts and produces
     one clean structured verdict dict.
+
+    malicious_threshold / suspicious_threshold are configurable via the
+    IRIS admin UI (module_configuration) and passed in by the caller.
+    Defaults here match the previous hardcoded values and are only used
+    as a fallback if the caller doesn't supply them.
     """
     good_results = [r for r in feed_results if "error" not in r]
     error_results = [r for r in feed_results if "error" in r]
@@ -39,8 +44,15 @@ def make_verdict(feed_results, ioc_type, ioc_value):
 
     highest_score = max(scores) if scores else 0
 
-    malicious_threshold = 80
-    suspicious_threshold = 60
+    try:
+        malicious_threshold = float(malicious_threshold)
+    except (TypeError, ValueError):
+        malicious_threshold = 80
+
+    try:
+        suspicious_threshold = float(suspicious_threshold)
+    except (TypeError, ValueError):
+        suspicious_threshold = 60
 
     if highest_score >= malicious_threshold:
         verdict = "MALICIOUS"
