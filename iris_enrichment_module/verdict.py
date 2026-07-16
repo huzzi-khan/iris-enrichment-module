@@ -1,7 +1,8 @@
 import datetime
 
 
-def make_verdict(feed_results, ioc_type, ioc_value, malicious_threshold=80, suspicious_threshold=60):
+def make_verdict(feed_results, ioc_type, ioc_value,
+                  malicious_threshold=80, suspicious_threshold=60):
     """
     Takes a list of raw feed result dicts and produces
     one clean structured verdict dict.
@@ -74,7 +75,7 @@ def make_verdict(feed_results, ioc_type, ioc_value, malicious_threshold=80, susp
     feed_sources = ", ".join(all_sources)
 
     country = _extract(good_results, "country", "unknown")
-    isp = _extract(good_results, ["isp", "as_owner"], "unknown")
+    isp = _extract(good_results, ["isp", "as_owner", "holder"], "unknown")
     is_tor = _extract(good_results, "is_tor", False)
     malware_family = _extract(
         good_results, ["malware_family", "popular_threat_name"], "unknown"
@@ -140,6 +141,12 @@ def _build_raw_detail(ioc_type, ioc_value, good, errors):
             lines.append(f"ISP: {r['isp']}")
         if "as_owner" in r:
             lines.append(f"AS Owner: {r['as_owner']}")
+        if "holder" in r:
+            lines.append(f"AS Holder: {r['holder']}")
+        if "asn" in r:
+            lines.append(f"ASN: {r['asn']}")
+        if "announced" in r:
+            lines.append(f"Announced: {r['announced']}")
         if "is_tor" in r:
             lines.append(f"Tor exit node: {r['is_tor']}")
         if "malware_family" in r:

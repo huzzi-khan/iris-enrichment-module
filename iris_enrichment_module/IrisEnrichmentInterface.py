@@ -168,9 +168,17 @@ class IrisEnrichmentInterface(IrisModuleInterface):
         domain_types = ["domain", "hostname", "domain|ip"]
         hash_types = ["md5", "sha1", "sha256", "sha512"]
         url_types = ["url"]
-        email_types = ["email", "email-src", "email-dst", "email-reply-to"]
+        email_types = [
+            "email", "email-src", "email-dst", "email-reply-to",
+            "target-email", "whois-registrant-email"
+        ]
         cve_types = ["vulnerability", "cve"]
-        asn_types = ["asn"]
+        # MISP/IRIS's real attribute type for ASNs is "AS" (uppercase),
+        # not "asn" -- "asn" never matched anything in the IOC type
+        # dropdown. Keeping "asn" too in case a future IRIS version adds it.
+        asn_types = ["AS", "asn"]
+        imphash_types = ["imphash"]
+        telfhash_types = ["telfhash"]
 
         if ioc_type in ip_types:
             if mod_conf.get("abuseipdb_enabled") and abuseipdb_key:
@@ -227,6 +235,18 @@ class IrisEnrichmentInterface(IrisModuleInterface):
                 from iris_enrichment_module.feeds.nvd import lookup_cve
                 self.log.info(f"Querying NVD for {ioc_value}")
                 results.append(lookup_cve(ioc_value, nvd_key))
+
+        elif ioc_type in imphash_types:
+            if mod_conf.get("malwarebazaar_enabled") and mb_key:
+                from iris_enrichment_module.feeds.malwarebazaar import lookup_imphash
+                self.log.info(f"Querying MalwareBazaar imphash for {ioc_value}")
+                results.append(lookup_imphash(ioc_value, mb_key))
+
+        elif ioc_type in telfhash_types:
+            if mod_conf.get("malwarebazaar_enabled") and mb_key:
+                from iris_enrichment_module.feeds.malwarebazaar import lookup_telfhash
+                self.log.info(f"Querying MalwareBazaar telfhash for {ioc_value}")
+                results.append(lookup_telfhash(ioc_value, mb_key))
 
         elif ioc_type in asn_types:
             from iris_enrichment_module.feeds.ripe import lookup_asn

@@ -165,6 +165,15 @@ module_configuration = [
         "type": "bool",
         "section": "Feeds"
     },
+    {
+        "param_name": "ripe_enabled",
+        "param_human_name": "Enable RIPE NCC",
+        "param_description": "Enable or disable RIPE NCC as an ASN enrichment source",
+        "default": True,
+        "mandatory": True,
+        "type": "bool",
+        "section": "Feeds"
+    },
 
     # ── Cache ─────────────────────────────────────────────
     {
