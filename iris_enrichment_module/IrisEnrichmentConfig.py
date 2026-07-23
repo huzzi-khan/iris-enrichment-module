@@ -47,7 +47,7 @@ module_configuration = [
     {
         "param_name": "emailrep_api_key",
         "param_human_name": "EmailRep API Key",
-        "param_description": "API key for EmailRep.io — used for email address enrichment",
+        "param_description": "Optional API key for EmailRep.io — improves rate limits. Email enrichment works without one. Request a free key at https://emailrep.io/key",
         "default": None,
         "mandatory": False,
         "type": "sensitive_string"
