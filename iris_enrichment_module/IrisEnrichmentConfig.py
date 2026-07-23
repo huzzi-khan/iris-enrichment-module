@@ -60,6 +60,14 @@ module_configuration = [
         "mandatory": False,
         "type": "sensitive_string"
     },
+    {
+        "param_name": "email_extras_enabled",
+        "param_human_name": "Email Extras (Disposable + MX Check) Enabled",
+        "param_description": "Keyless supplementary email checks: disposable-domain lookup (Kickbox) and MX record validity (DNS). No API key required.",
+        "default": True,
+        "mandatory": False,
+        "type": "bool"
+    },
 
     # ── Triggers ──────────────────────────────────────────
     {
