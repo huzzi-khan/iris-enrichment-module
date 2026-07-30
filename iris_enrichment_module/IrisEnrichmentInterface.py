@@ -229,9 +229,7 @@ class IrisEnrichmentInterface(IrisModuleInterface):
                 from iris_enrichment_module.feeds.emailrep import lookup_email
                 emailrep_key = mod_conf.get("emailrep_api_key")
                 results.append(lookup_email(ioc_value, emailrep_key))
-            if mod_conf.get("email_extras_enabled"):
-                from iris_enrichment_module.feeds.email_extras import lookup_email_extras
-                results.append(lookup_email_extras(ioc_value))
+            
 
         elif ioc_type in cve_types:
             if mod_conf.get("nvd_enabled"):
