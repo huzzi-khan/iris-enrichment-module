@@ -105,8 +105,9 @@ class IrisEnrichmentInterface(IrisModuleInterface):
             cache_ttl = float(mod_conf.get("cache_ttl_hours", 24)) * 3600
 
             # ── Step 3: Check cache ───────────────────────
-            from iris_enrichment_module.cache import EnrichmentCache
-            _cache = EnrichmentCache(ttl_seconds=cache_ttl, enabled=cache_enabled)
+            from iris_enrichment_module.cache import cache as _cache
+            _cache._ttl = cache_ttl
+            _cache._enabled = cache_enabled
 
             if cache_enabled:
                 cached = _cache.get(ioc_value)
@@ -197,7 +198,7 @@ class IrisEnrichmentInterface(IrisModuleInterface):
                 self.log.info(f"Querying VirusTotal domain for {ioc_value}")
                 results.append(lookup_domain(ioc_value, vt_key))
 
-            if mod_conf.get("urlhaus_enabled"):
+            if mod_conf.get("urlhaus_enabled") and urlhaus_key:
                 from iris_enrichment_module.feeds.urlhaus import lookup_host
                 self.log.info(f"Querying URLhaus host for {ioc_value}")
                 results.append(lookup_host(ioc_value, urlhaus_key))
@@ -219,7 +220,7 @@ class IrisEnrichmentInterface(IrisModuleInterface):
                 self.log.info(f"Querying VirusTotal URL for {ioc_value}")
                 results.append(vt_url(ioc_value, vt_key))
 
-            if mod_conf.get("urlhaus_enabled"):
+            if mod_conf.get("urlhaus_enabled") and urlhaus_key:
                 from iris_enrichment_module.feeds.urlhaus import lookup_url
                 self.log.info(f"Querying URLhaus URL for {ioc_value}")
                 results.append(lookup_url(ioc_value, urlhaus_key))
@@ -261,9 +262,10 @@ class IrisEnrichmentInterface(IrisModuleInterface):
                 results.append(lookup_telfhash(ioc_value, mb_key))
 
         elif ioc_type in asn_types:
-            from iris_enrichment_module.feeds.ripe import lookup_asn
-            self.log.info(f"Querying RIPE for {ioc_value}")
-            results.append(lookup_asn(ioc_value))
+            if mod_conf.get("ripe_enabled", True):
+                from iris_enrichment_module.feeds.ripe import lookup_asn
+                self.log.info(f"Querying RIPE for {ioc_value}")
+                results.append(lookup_asn(ioc_value))
 
         else:
             self.log.warning(f"No feed configured for IOC type: {ioc_type}")

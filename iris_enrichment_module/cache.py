@@ -47,3 +47,9 @@ class EnrichmentCache:
     def size(self):
         with self._lock:
             return len(self._store)
+
+# ── Shared singleton instance ──────────────────
+# Created once at import time; the interface reconfigures its
+# ttl/enabled flags in place on each call rather than replacing
+# the object, so the underlying store persists across IOC hooks.
+cache = EnrichmentCache()

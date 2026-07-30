@@ -8,4 +8,3 @@ config.yml
 dist/
 build/
 test_config.py
-__init__.py
