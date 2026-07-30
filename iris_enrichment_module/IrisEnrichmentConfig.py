@@ -60,6 +60,14 @@ module_configuration = [
         "mandatory": False,
         "type": "sensitive_string"
     },
+    {
+        "param_name": "abstractapi_reputation_api_key",
+        "param_human_name": "AbstractAPI Email Reputation API Key",
+        "param_description": "Free key from https://www.abstractapi.com/api/email-reputation-api",
+        "default": None,
+        "mandatory": False,
+        "type": "sensitive_string"
+    },
 
     # ── Triggers ──────────────────────────────────────────
     {
@@ -173,6 +181,14 @@ module_configuration = [
         "mandatory": True,
         "type": "bool",
         "section": "Feeds"
+    },
+    {
+        "param_name": "abstractapi_reputation_enabled",
+        "param_human_name": "Enable AbstractAPI Email Reputation (EmailRep fallback)",
+        "param_description": "Used automatically when EmailRep is disabled, rate-limited, or unavailable. Provides breach history, domain age, and risk scoring.",
+        "default": True,
+        "mandatory": False,
+        "type": "bool"
     },
 
     # ── Cache ─────────────────────────────────────────────
