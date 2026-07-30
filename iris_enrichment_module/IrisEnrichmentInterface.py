@@ -225,18 +225,21 @@ class IrisEnrichmentInterface(IrisModuleInterface):
                 results.append(lookup_url(ioc_value, urlhaus_key))
 
         elif ioc_type in email_types:
-            emailrep_result = None
             if mod_conf.get("emailrep_enabled"):
                 from iris_enrichment_module.feeds.emailrep import lookup_email
                 emailrep_key = mod_conf.get("emailrep_api_key")
+                self.log.info(f"Querying EmailRep for {ioc_value}")
                 emailrep_result = lookup_email(ioc_value, emailrep_key)
+                self.log.info(f"EmailRep result for {ioc_value}: {emailrep_result}")
                 results.append(emailrep_result)
 
-            emailrep_failed = (emailrep_result is None) or ("error" in emailrep_result)
-            if emailrep_failed and mod_conf.get("abstractapi_reputation_enabled"):
+            if mod_conf.get("abstractapi_reputation_enabled"):
                 from iris_enrichment_module.feeds.abstractapi_email import lookup_email as lookup_email_abstract
                 abstractapi_key = mod_conf.get("abstractapi_reputation_api_key")
-                results.append(lookup_email_abstract(ioc_value, abstractapi_key))
+                self.log.info(f"Querying AbstractAPI for {ioc_value}")
+                abstractapi_result = lookup_email_abstract(ioc_value, abstractapi_key)
+                self.log.info(f"AbstractAPI result for {ioc_value}: {abstractapi_result}")
+                results.append(abstractapi_result)
             
 
         elif ioc_type in cve_types:
