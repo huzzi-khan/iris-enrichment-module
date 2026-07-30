@@ -8,14 +8,12 @@ setup(
     packages=find_packages(),
     python_requires=">=3.9",
     install_requires=[
-    "requests",
-    "pyyaml",
-    "dnspython",
+        "requests",
     ],
     entry_points={
         "iris_module": [
             "iris_enrichment_module=iris_enrichment_module"
-            ".IrisEnrichmentInterface:IrisEnrichmentModInterface",
+            ".IrisEnrichmentInterface:IrisEnrichmentInterface",
         ]
     },
 )
